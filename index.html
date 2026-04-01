@@ -152,7 +152,7 @@
         <div class="guide-controls">
             <div class="mic-btn-large" id="main-mic-btn" onclick="toggleGuideMic()">🎙️</div>
             <div class="chat-input-box">
-                <input type="text" id="ai-chat-input" placeholder="或静静打字..." onkeypress="if(event.key==='Enter') sendGuideText()">
+                <input type="text" id="ai-chat-input" placeholder="被白昼关闭的，由梦来送与我们" onkeypress="if(event.key==='Enter') sendGuideText()">
                 <div class="chat-send-btn" id="ai-chat-send" onclick="sendGuideText()">↑</div>
             </div>
             <div class="end-guide-btn" id="end-guide-btn" onclick="finishAIGuide()">[ 结束追忆并凝结卡片 ]</div>
@@ -170,14 +170,14 @@
         <div class="intensity-wrapper"><div class="intensity-label">大小 / SIZE</div><input type="range" id="dream-intensity" min="100" max="160" value="130"></div>
         <div class="meta-input-row"><input type="date" id="dream-date"><input type="text" id="dream-keyword" placeholder="关键词..."></div>
         <div class="textarea-header"><span class="expand-btn" onclick="openFullscreenEditor()">⛶ 专注书写</span></div>
-        <textarea id="dream-text" placeholder="记录下那个瞬间..."></textarea>
+        <textarea id="dream-text" placeholder="爱与梦是括号的两端"></textarea>
         <div class="btn" id="btn-save-manual" style="padding: 10px 40px;" onclick="saveManualDream()">封存并分析</div>
         <div style="position: absolute; top: 6%; right: 8%; padding: 10px; color: var(--text-muted); cursor: pointer;" onclick="toggleManualInput(false)">✕</div>
     </div>
 
     <div id="fullscreen-editor">
         <div class="fs-close-btn" onclick="closeFullscreenEditor()">[ 完 成 ]</div>
-        <textarea id="fs-textarea" placeholder="在这里，无人打扰，沉浸于你的梦境..."></textarea>
+        <textarea id="fs-textarea" placeholder="我们走进了夜海，去打捞遗失的繁星"></textarea>
     </div>
 
     <div id="view-library" class="view-layer">
