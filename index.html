@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>OneiroLib | 梦境图书馆</title>
+    <style>
+        :root { --bg-dark: #050a10; --text-main: #ffffff; --text-muted: rgba(255, 255, 255, 0.4); }
+
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: var(--bg-dark); overflow: hidden; font-family: "-apple-system", "BlinkMacSystemFont", "PingFang SC", sans-serif; color: var(--text-main); -webkit-tap-highlight-color: transparent; user-select: none; }
+        
+        #shader-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
+
+        .view-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.6s ease; }
+        .view-layer.active { opacity: 1; pointer-events: auto; }
+
+        /* ====== 全局公用 ====== */
+        .btn { color: rgba(255,255,255,0.8); font-size: 14px; letter-spacing: 2px; padding: 12px 30px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); backdrop-filter: blur(10px); transition: 0.2s; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .btn:active { background: rgba(255,255,255,0.1); transform: scale(0.95); }
+        .top-btn { font-size: 12px; color: var(--text-muted); padding: 5px 10px; cursor: pointer; transition: 0.3s; }
+        .top-btn.active { color: #fff; border-bottom: 1px solid #fff; }
+
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 105; opacity: 0; pointer-events: none; transition: 0.5s; }
+        #overlay.active { opacity: 1; pointer-events: auto; }
+
+        /* ====== 设置面板 ====== */
+        #btn-settings { position: absolute; top: 5%; right: 5%; font-size: 20px; opacity: 0.4; padding: 10px; z-index: 20; cursor: pointer; }
+        #settings-panel { visibility: hidden; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -45%); width: 80vw; max-width: 350px; background: rgba(15, 20, 25, 0.9); backdrop-filter: blur(20px); border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); z-index: 200; padding: 30px 20px; text-align: center; transition: 0.3s; opacity: 0; }
+        #settings-panel.active { visibility: visible; transform: translate(-50%, -50%); opacity: 1; pointer-events: auto; }
+        #settings-panel input { width: 90%; background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.3); color: #fff; font-size: 14px; padding: 10px 0; text-align: center; margin-bottom: 25px; outline: none; }
+
+        /* ====== 首页 UI ====== */
+        header { position: absolute; top: 12%; text-align: center; }
+        h1 { font-weight: 200; letter-spacing: 8px; font-size: 26px; margin-bottom: 5px; text-transform: uppercase; text-shadow: 0 0 20px rgba(255,255,255,0.2); }
+        .h1-zh { font-size: 12px; color: var(--text-muted); letter-spacing: 6px; }
+
+        .home-center { position: absolute; top: 40%; display: flex; flex-direction: column; align-items: center; width: 100%; }
+        @keyframes orbBreathe { 0%, 100% { transform: scale(1); box-shadow: 0 0 40px rgba(0, 255, 150, 0.2), inset 0 0 20px rgba(0, 255, 150, 0.1); } 50% { transform: scale(1.05); box-shadow: 0 0 60px rgba(0, 255, 150, 0.4), inset 0 0 30px rgba(0, 255, 150, 0.2); } }
+        .orb-btn { width: 120px; height: 120px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.1), rgba(0, 255, 150, 0.05)); border: 1px solid rgba(0, 255, 150, 0.3); display: flex; align-items: center; justify-content: center; flex-direction: column; cursor: pointer; animation: orbBreathe 4s infinite ease-in-out; transition: 0.3s; backdrop-filter: blur(10px); }
+        .orb-btn:active { transform: scale(0.95) !important; background: rgba(0, 255, 150, 0.15); }
+        .orb-icon { font-size: 32px; margin-bottom: 5px; opacity: 0.8; }
+        .orb-text { font-size: 11px; letter-spacing: 2px; color: rgba(255,255,255,0.8); }
+
+        .manual-link { margin-top: 40px; font-size: 12px; color: var(--text-muted); letter-spacing: 1px; border-bottom: 1px solid transparent; cursor: pointer; transition: 0.3s; padding-bottom: 2px; }
+        .manual-link:active { color: #fff; border-color: rgba(255,255,255,0.3); }
+        .lib-link { position: absolute; bottom: 10%; font-size: 12px; letter-spacing: 2px; color: rgba(255,255,255,0.6); padding: 10px; cursor: pointer; }
+
+        /* ====== 🌟 修复版：深潜模式布局 ====== */
+        #view-ai-guide { justify-content: flex-start; padding-top: 0; }
+        /* 固定导航栏，防止重叠 */
+        .ai-guide-navbar { width: 100%; padding: 6% 6% 3% 6%; background: linear-gradient(to bottom, rgba(5,10,16,0.9), transparent); backdrop-filter: blur(5px); z-index: 60; box-sizing: border-box; display: flex; align-items: center; }
+        
+        .chat-container { width: 90%; flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 20px 0 120px 0; -webkit-overflow-scrolling: touch; }
+        
+        .msg { max-width: 85%; line-height: 1.6; font-size: 15px; padding: 12px 18px; border-radius: 20px; word-wrap: break-word; user-select: text; opacity: 0; transform: translateY(10px); animation: fadeInMsg 0.5s forwards ease-out; }
+        @keyframes fadeInMsg { to { opacity: 1; transform: translateY(0); } }
+        .msg-ai { align-self: flex-start; background: rgba(0, 255, 150, 0.05); border-bottom-left-radius: 5px; border: 1px solid rgba(0, 255, 150, 0.2); color: #c0f8e0; font-weight: 300; }
+        .msg-user { align-self: flex-end; background: rgba(255, 255, 255, 0.1); border-bottom-right-radius: 5px; color: #fff; }
+
+        .guide-controls { position: absolute; bottom: 0; width: 100%; padding-bottom: 5%; background: linear-gradient(to top, rgba(5,10,16,1) 40%, transparent); display: flex; flex-direction: column; align-items: center; gap: 12px; z-index: 55; }
+        .mic-btn-large { width: 65px; height: 65px; border-radius: 50%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; transition: 0.3s; backdrop-filter: blur(10px); }
+        .mic-btn-large.recording { background: rgba(255, 100, 100, 0.2); border-color: #ff6b6b; box-shadow: 0 0 30px rgba(255, 100, 100, 0.4); animation: pulseRecord 1.5s infinite; }
+        .chat-input-box { display: flex; width: 85%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 25px; padding: 5px 5px 5px 15px; align-items: center; backdrop-filter: blur(10px); }
+        .chat-input-box input { flex-grow: 1; background: transparent; border: none; color: #fff; font-size: 14px; outline: none; padding: 8px 0; }
+        .chat-send-btn { width: 32px; height: 32px; border-radius: 50%; background: rgba(0,255,150,0.2); display: flex; justify-content: center; align-items: center; cursor: pointer; color: #00ff96; font-weight: bold; transition: 0.3s; }
+        .end-guide-btn { font-size: 11px; letter-spacing: 2px; color: var(--text-muted); padding: 5px; cursor: pointer; margin-top: 5px; }
+
+        /* ====== 手动录入窗 ====== */
+        #input-bubble { visibility: hidden; position: fixed; top: 45%; left: 50%; transform: translate(-50%, -50%) scale(0.9); width: 90vw; height: 100vw; max-height: 480px; max-width: 400px; background: rgba(15, 20, 25, 0.85); backdrop-filter: blur(25px); border-radius: 50%; border: 1px solid rgba(255,255,255,0.1); z-index: 110; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: all 0.4s ease; opacity: 0; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+        #input-bubble.active { visibility: visible; transform: translate(-50%, -50%) scale(1); opacity: 1; pointer-events: auto; }
+        .mood-selector { display: flex; gap: 15px; margin-bottom: 20px; }
+        .mood-dot { width: 18px; height: 18px; border-radius: 50%; opacity: 0.3; transition: 0.3s; }
+        .mood-dot.active { opacity: 1; transform: scale(1.3); border: 1.5px solid #fff; }
+        .intensity-wrapper { width: 60%; margin-bottom: 15px; text-align: center; }
+        .intensity-label { font-size: 10px; color: var(--text-muted); margin-bottom: 10px; letter-spacing: 1px; }
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-runnable-track { height: 2px; background: rgba(255,255,255,0.2); }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #fff; margin-top: -7px; }
+        .meta-input-row { display: flex; width: 80%; gap: 10px; margin-bottom: 15px; justify-content: center; }
+        .meta-input-row input { width: 45%; background: transparent; border: none; border-bottom: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 15px; text-align: center; font-family: inherit; outline: none; padding-bottom: 5px; }
+        .textarea-header { width: 80%; display: flex; justify-content: flex-end; margin-bottom: 5px; }
+        .expand-btn { font-size: 11px; color: #00ff96; cursor: pointer; letter-spacing: 1px; opacity: 0.8; transition: 0.3s; }
+        textarea { width: 80%; height: 110px; line-height: 1.6; user-select: text; resize: none; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: #fff; font-size: 15px; font-family: inherit; outline: none; padding: 12px; box-sizing: border-box; margin-bottom: 15px; }
+
+        /* ====== 全屏专注画布 ====== */
+        #fullscreen-editor { visibility: hidden; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(5, 10, 15, 0.98); backdrop-filter: blur(30px); z-index: 150; display: flex; flex-direction: column; align-items: center; opacity: 0; transition: 0.4s ease; padding-top: 15%; box-sizing: border-box; }
+        #fullscreen-editor.active { visibility: visible; opacity: 1; pointer-events: auto; }
+        #fs-textarea { width: 90%; height: 75%; background: transparent; border: none; color: #fff; font-size: 16px; line-height: 1.8; outline: none; resize: none; font-family: inherit; }
+        .fs-close-btn { position: absolute; top: 6%; right: 6%; color: #00ff96; font-size: 14px; letter-spacing: 2px; cursor: pointer; font-weight: 300; }
+
+        /* ====== 图书馆网格 ====== */
+        .lib-header { position: absolute; top: 6%; width: 90%; display: flex; justify-content: space-between; align-items: center; z-index: 20;}
+        #library-grid { width: 100%; height: 80%; display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; align-content: flex-start; overflow-y: scroll; padding: 20px 0 100px 0; }
+        .lib-bubble { border-radius: 50%; border: 1px solid rgba(255,255,255,0.1); display: flex; flex-direction: column; align-items: center; justify-content: center; animation: mobileFloat 4s ease-in-out infinite; opacity: 0.85; transition: 0.3s; cursor: pointer; }
+        @keyframes mobileFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+        .b-date { font-size: 10px; opacity: 0.6; margin-bottom: 2px; font-family: monospace; }
+        .b-key { font-size: 13px; letter-spacing: 1px; padding: 0 5px; text-align: center; }
+
+        /* ====== 双面 3D 记忆卡 ====== */
+        .card-perspective { visibility: hidden; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -45%); width: 85vw; height: 70vh; perspective: 1000px; z-index: 120; transition: all 0.5s ease; opacity: 0; pointer-events: none; }
+        .card-perspective.active { visibility: visible; transform: translate(-50%, -50%); opacity: 1; pointer-events: auto; }
+        .card-inner { position: relative; width: 100%; height: 100%; text-align: center; transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275); transform-style: preserve-3d; border-radius: 30px; box-shadow: 0 20px 50px rgba(0,0,0,0.8); }
+        .card-inner.flipped { transform: rotateY(180deg); }
+        .card-face { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 30px; display: flex; flex-direction: column; align-items: center; padding: 25px 20px; box-sizing: border-box; }
+        .card-front { background: rgba(15, 20, 25, 0.95); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(25px); }
+        .card-back { background: radial-gradient(circle at top right, rgba(20, 10, 30, 0.95), rgba(5, 5, 10, 0.98)); border: 1px solid rgba(150, 80, 255, 0.3); transform: rotateY(180deg); backdrop-filter: blur(25px); }
+        .card-controls { width: 100%; display: flex; justify-content: space-between; margin-bottom: 5px; z-index: 10; }
+        .card-title { font-weight: 300; font-size: 22px; letter-spacing: 2px; margin: 10px 0; outline: none; }
+        .card-meta { font-size: 11px; opacity: 0.4; margin-bottom: 15px; font-family: monospace; }
+        .card-content { width: 100%; text-align: justify; line-height: 1.8; font-size: 15px; color: #e0e5e0; overflow-y: auto; flex-grow: 1; margin-bottom: 15px; user-select: text; padding: 0 10px; box-sizing: border-box; }
+        #front-text-edit { width: 100%; height: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-family: inherit; font-size: 15px; line-height: 1.8; padding: 10px; border-radius: 15px; display: none; resize: none; outline: none; }
+        .flip-btn { font-size: 11px; letter-spacing: 2px; color: rgba(255,255,255,0.8); background: rgba(255,255,255,0.1); padding: 12px 0; width: 80%; border-radius: 20px; text-transform: uppercase; display: flex; justify-content: center; align-items: center; gap: 8px; cursor: pointer; transition: 0.3s; margin-top: auto; }
+        .re-analyze-btn { font-size: 10px; color: #00ff96; margin-top: 10px; opacity: 0.6; cursor: pointer; letter-spacing: 1px; }
+
+        #volume-widget { position: fixed; bottom: 5%; right: 5%; z-index: 100; display: flex; align-items: center; gap: 8px; opacity: 0.5; }
+        #bgm-volume { width: 60px; }
+    </style>
+</head>
+<body>
+
+    <audio id="bgm" loop><source src="dream.mp3" type="audio/mpeg"></audio>
+    <div id="volume-widget"><span style="font-size: 10px;">VOL</span><input type="range" id="bgm-volume" min="0" max="1" step="0.01" value="0.4"></div>
+    <canvas id="shader-canvas"></canvas>
+    <div id="overlay"></div>
+
+    <div id="btn-settings" onclick="openSettings()">⚙️</div>
+
+    <div id="settings-panel">
+        <h3 style="font-weight: 300; letter-spacing: 2px; margin-top: 0;">潜意识连接协议</h3>
+        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 25px;">请输入您的 DeepSeek 密钥以激活解梦师。</p>
+        <input type="password" id="api-key-input" placeholder="sk-xxxxxxxxxxxxxxxxxxxx">
+        <div class="btn" style="margin-bottom: 15px;" onclick="saveApiKey()">保存并连接</div>
+        <div class="btn" style="background: transparent;" onclick="closeSettings()">取消</div>
+    </div>
+
+    <div id="view-home" class="view-layer active">
+        <header><h1>OneiroLib</h1><div class="h1-zh">梦境图书馆</div></header>
+        <div class="home-center">
+            <div class="orb-btn" onclick="startAIGuide()"><div class="orb-icon">✦</div><div class="orb-text">深潜模式</div></div>
+            <div class="manual-link" onclick="toggleManualInput(true)">[ 书写模式 ]</div>
+        </div>
+        <div class="lib-link" onclick="switchView('view-library')">潜入馆内 〉</div>
+    </div>
+
+    <div id="view-ai-guide" class="view-layer">
+        <div class="ai-guide-navbar">
+            <span class="top-btn" onclick="abortAIGuide()">✕ 中断深潜</span>
+        </div>
+        
+        <div class="chat-container" id="chat-box"></div>
+        
+        <div class="guide-controls">
+            <div class="mic-btn-large" id="main-mic-btn" onclick="toggleGuideMic()">🎙️</div>
+            <div class="chat-input-box">
+                <input type="text" id="ai-chat-input" placeholder="或静静打字..." onkeypress="if(event.key==='Enter') sendGuideText()">
+                <div class="chat-send-btn" id="ai-chat-send" onclick="sendGuideText()">↑</div>
+            </div>
+            <div class="end-guide-btn" id="end-guide-btn" onclick="finishAIGuide()">[ 结束追忆并凝结卡片 ]</div>
+        </div>
+    </div>
+
+    <div id="input-bubble">
+        <div class="mood-selector">
+            <div class="mood-dot active" data-color="0, 255, 150" style="background: #00ff96;"></div>
+            <div class="mood-dot" data-color="80, 200, 255" style="background: #50c8ff;"></div>
+            <div class="mood-dot" data-color="200, 100, 255" style="background: #c864ff;"></div>
+            <div class="mood-dot" data-color="255, 180, 50" style="background: #ffb432;"></div>
+            <div class="mood-dot" data-color="200, 200, 200" style="background: #eee;"></div>
+        </div>
+        <div class="intensity-wrapper"><div class="intensity-label">大小 / SIZE</div><input type="range" id="dream-intensity" min="100" max="160" value="130"></div>
+        <div class="meta-input-row"><input type="date" id="dream-date"><input type="text" id="dream-keyword" placeholder="关键词..."></div>
+        <div class="textarea-header"><span class="expand-btn" onclick="openFullscreenEditor()">⛶ 专注书写</span></div>
+        <textarea id="dream-text" placeholder="记录下那个瞬间..."></textarea>
+        <div class="btn" id="btn-save-manual" style="padding: 10px 40px;" onclick="saveManualDream()">封存并分析</div>
+        <div style="position: absolute; top: 6%; right: 8%; padding: 10px; color: var(--text-muted); cursor: pointer;" onclick="toggleManualInput(false)">✕</div>
+    </div>
+
+    <div id="fullscreen-editor">
+        <div class="fs-close-btn" onclick="closeFullscreenEditor()">[ 完 成 ]</div>
+        <textarea id="fs-textarea" placeholder="在这里，无人打扰，沉浸于你的梦境..."></textarea>
+    </div>
+
+    <div id="view-library" class="view-layer">
+        <div class="lib-header">
+            <div class="top-btn" onclick="switchView('view-home')">〈 浮出水面</div>
+            <div style="display:flex; gap:10px;"><span class="top-btn active" id="sort-time" onclick="setSortMode('time')">时间</span><span class="top-btn" id="sort-color" onclick="setSortMode('color')">情绪</span></div>
+        </div>
+        <div id="library-grid"></div>
+    </div>
+
+    <div id="archive-card-wrapper" class="card-perspective">
+        <div class="card-inner" id="archive-card-inner">
+            <div class="card-face card-front">
+                <div class="card-controls">
+                    <span class="top-btn" style="color: #ff6b6b;" onclick="deleteDream()">抹除</span>
+                    <span class="top-btn" id="edit-btn" onclick="toggleEditMode()" style="color: #00ff96;">修改</span>
+                    <span class="top-btn" onclick="hideArchive()">关闭 ✕</span>
+                </div>
+                <div class="card-title" id="front-keyword" contenteditable="false"></div>
+                <div class="card-meta" id="front-meta"></div>
+                <div class="card-content">
+                    <div id="front-text-display"></div>
+                    <textarea id="front-text-edit"></textarea>
+                </div>
+                <div class="flip-btn" id="flip-to-back" onclick="toggleCardFlip()"><span>翻转探寻潜意识</span> ↻</div>
+            </div>
+            <div class="card-face card-back">
+                <div class="card-controls">
+                    <span style="font-size:10px; color:rgba(150,80,255,0.6); letter-spacing:2px;">✦ AI INSIGHT</span>
+                    <span class="top-btn" onclick="hideArchive()">关闭 ✕</span>
+                </div>
+                <div class="card-title" style="color: #d8b4ff;">深层解析</div>
+                <div class="card-content" id="back-analysis" style="color: rgba(255,255,255,0.85); font-weight:300;"></div>
+                <div class="flip-btn flip-btn-back" onclick="toggleCardFlip()">↺ <span>返回表层记忆</span></div>
+                <div class="re-analyze-btn" id="re-analyze-trigger" onclick="reAnalyzeDream()">[ 梦境已更迭，重新解析 ]</div>
+            </div>
+        </div>
+    </div>
+
+    <script id="fragmentShader" type="x-shader/x-fragment">
+        precision highp float; uniform float iTime; uniform vec2 iResolution;
+        vec3 getMoodColor(float index) { float m = mod(index, 5.0); if(m < 1.0) return vec3(0.00, 0.18, 0.12); if(m < 2.0) return vec3(0.08, 0.12, 0.25); if(m < 3.0) return vec3(0.15, 0.08, 0.25); if(m < 4.0) return vec3(0.18, 0.10, 0.03); return vec3(0.12, 0.12, 0.12); }
+        void main() { vec2 uv = (2.0 * gl_FragCoord.xy - iResolution.xy) / iResolution.y; vec3 color = vec3(0.03, 0.04, 0.05) + 0.02 * uv.y; for( int i=0; i<18; i++ ) { float pha = sin(float(i)*546.13+1.0)*0.5 + 0.5; float siz = pow( sin(float(i)*651.74+5.0)*0.5 + 0.5, 4.0 ); float pox = sin(float(i)*321.55+4.1) * iResolution.x / iResolution.y; float rad = 0.05 + 0.45 * siz; vec2 pos = vec2( pox, -1.0-rad + (2.0+2.0*rad)*mod(pha+0.04*iTime*(0.1+0.5*siz),1.0)); float dis = length( uv - pos ); vec3 col = getMoodColor(float(i)); float f = length(uv-pos)/rad; f = sqrt(clamp(1.0-f*f,0.0,1.0)); color += col *(1.0-smoothstep( rad*0.96, rad, dis )) * f * 0.85; } gl_FragColor = vec4(color * sqrt(1.5-0.5*length(uv)), 1.0); }
+    </script>
+
+    <script>
+        const canvas = document.getElementById('shader-canvas'); const gl = canvas.getContext('webgl'); 
+        const shaderSource = document.getElementById('fragmentShader').text; 
+        function createShader(gl, type, source) { const s = gl.createShader(type); gl.shaderSource(s, source); gl.compileShader(s); return s; } 
+        const program = gl.createProgram(); const vs = gl.createShader(gl.VERTEX_SHADER); gl.shaderSource(vs, 'attribute vec2 p; void main(){ gl_Position=vec4(p,0,1); }'); gl.compileShader(vs); 
+        const fs = createShader(gl, gl.FRAGMENT_SHADER, shaderSource); gl.attachShader(program, vs); gl.attachShader(program, fs); gl.linkProgram(program); gl.useProgram(program); 
+        const buffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW); 
+        const pLoc = gl.getAttribLocation(program, 'p'); gl.enableVertexAttribArray(pLoc); gl.vertexAttribPointer(pLoc, 2, gl.FLOAT, false, 0, 0); 
+        const tLoc = gl.getUniformLocation(program, 'iTime'); const rLoc = gl.getUniformLocation(program, 'iResolution'); 
+        function render(time) { canvas.width = window.innerWidth; canvas.height = window.innerHeight; gl.viewport(0, 0, canvas.width, canvas.height); gl.uniform1f(tLoc, time * 0.001); gl.uniform2f(rLoc, canvas.width, canvas.height); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); requestAnimationFrame(render); } requestAnimationFrame(render);
+
+        const bgm = document.getElementById('bgm'); document.getElementById('bgm-volume').oninput = function() { bgm.volume = this.value; };
+        let dreamsDatabase = JSON.parse(localStorage.getItem('Oneiro_V3')) || [];
+        function sync() { localStorage.setItem('Oneiro_V3', JSON.stringify(dreamsDatabase)); }
+
+        function openSettings() { document.getElementById('settings-panel').classList.add('active'); document.getElementById('overlay').classList.add('active'); document.getElementById('api-key-input').value = localStorage.getItem('Oneiro_API_Key') || ''; }
+        function closeSettings() { document.getElementById('settings-panel').classList.remove('active'); document.getElementById('overlay').classList.remove('active'); }
+        function saveApiKey() { const key = document.getElementById('api-key-input').value.trim(); if(key) { localStorage.setItem('Oneiro_API_Key', key); alert("解梦师已就绪。"); closeSettings(); } else alert("密钥不能为空。"); }
+        function switchView(v) { bgm.play().catch(()=>{}); document.querySelectorAll('.view-layer').forEach(l => l.classList.remove('active')); document.getElementById(v).classList.add('active'); document.getElementById('btn-settings').style.display = (v === 'view-home') ? 'block' : 'none'; if(v==='view-library') renderLibrary(); }
+
+        async function callDeepSeek(messagesArr) {
+            const apiKey = localStorage.getItem('Oneiro_API_Key');
+            if (!apiKey) return "未连接解梦师。";
+            try {
+                const res = await fetch('https://api.deepseek.com/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }, body: JSON.stringify({ model: "deepseek-chat", messages: messagesArr, temperature: 0.7 }) });
+                const data = await res.json(); return data.choices[0].message.content;
+            } catch (err) { return "（星轨信号干扰）"; }
+        }
+        
+        let manualColor = "0, 255, 150";
+        document.querySelectorAll('.mood-dot').forEach(dot => { dot.onclick = function() { document.querySelectorAll('.mood-dot').forEach(d => d.classList.remove('active')); this.classList.add('active'); manualColor = this.getAttribute('data-color'); }; });
+        function toggleManualInput(show) { bgm.play().catch(()=>{}); const b = document.getElementById('input-bubble'); const o = document.getElementById('overlay'); if(show) { b.classList.add('active'); o.classList.add('active'); document.getElementById('dream-date').value = new Date().toISOString().split('T')[0]; } else { b.classList.remove('active'); o.classList.remove('active'); } }
+        function openFullscreenEditor() { document.getElementById('fs-textarea').value = document.getElementById('dream-text').value; document.getElementById('fullscreen-editor').classList.add('active'); }
+        function closeFullscreenEditor() { document.getElementById('dream-text').value = document.getElementById('fs-textarea').value; document.getElementById('fullscreen-editor').classList.remove('active'); }
+
+        async function saveManualDream() {
+            const tx = document.getElementById('dream-text').value; if(!tx) return;
+            const btn = document.getElementById('btn-save-manual'); btn.innerText = "✨ 生成中..."; btn.style.pointerEvents = "none";
+            const analysis = await callDeepSeek([{role: "system", content: "你是一位解梦师。生成100字内的诗意解析。"}, {role: "user", content: tx}]);
+            dreamsDatabase.push({ id: Date.now(), date: document.getElementById('dream-date').value.replace(/-/g,'.'), keyword: document.getElementById('dream-keyword').value || "片段", summary: tx, analysis: analysis, color: manualColor, size: document.getElementById('dream-intensity').value });
+            sync(); btn.innerText = "封存并分析"; btn.style.pointerEvents = "auto"; toggleManualInput(false); 
+            document.getElementById('dream-text').value = ""; document.getElementById('dream-keyword').value = "";
+        }
+
+        let chatHistory = []; let aiRecognition = null; let isAiListening = false;
+        function appendMsg(role, text) { const box = document.getElementById('chat-box'); const el = document.createElement('div'); el.className = `msg msg-${role}`; el.innerText = text; box.appendChild(el); box.scrollTop = box.scrollHeight; }
+        
+        function startAIGuide() { 
+            if(!localStorage.getItem('Oneiro_API_Key')) { openSettings(); return; } 
+            switchView('view-ai-guide'); 
+            document.getElementById('chat-box').innerHTML = ""; 
+            chatHistory = [{ role: "system", content: "你是梦境引导师。不解梦、不比喻、不诠释。每次回复只提一个简短问题。当用户回复较长、提到关键事件（（如人名、带有转折义的词语、超乎常理的事件）或表达情绪、自我分析时，先简短共情一句，再提问。" }]; 
+            const welcomeMsg = "昨晚，你潜入了一个怎样的梦里？"; 
+            appendMsg('ai', welcomeMsg); 
+            chatHistory.push({role: "assistant", content: welcomeMsg}); 
+            initSpeech(); 
+        }
+
+        function abortAIGuide() {
+            if(confirm("确定要中断深潜吗？此时的所有对话碎片都将消散。")) {
+                if(isAiListening && aiRecognition) aiRecognition.stop();
+                switchView('view-home');
+                chatHistory = [];
+                document.getElementById('chat-box').innerHTML = "";
+            }
+        }
+
+        function initSpeech() { const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition; if(!SpeechRec) return; aiRecognition = new SpeechRec(); aiRecognition.lang = 'zh-CN'; aiRecognition.onstart = () => { isAiListening = true; document.getElementById('main-mic-btn').classList.add('recording'); }; aiRecognition.onresult = async (e) => { await processUserGuideInput(e.results[0][0].transcript); }; aiRecognition.onend = () => { isAiListening = false; document.getElementById('main-mic-btn').classList.remove('recording'); }; }
+        function toggleGuideMic() { if(!aiRecognition) return; if(isAiListening) aiRecognition.stop(); else aiRecognition.start(); }
+        async function sendGuideText() { const inputEl = document.getElementById('ai-chat-input'); const text = inputEl.value.trim(); if(!text) return; inputEl.value = ""; await processUserGuideInput(text); }
+        async function processUserGuideInput(text) { appendMsg('user', text); chatHistory.push({role: "user", content: text}); const btnSend = document.getElementById('ai-chat-send'); btnSend.innerHTML = "…"; const aiReply = await callDeepSeek(chatHistory); appendMsg('ai', aiReply); chatHistory.push({role: "assistant", content: aiReply}); btnSend.innerHTML = "↑"; }
+
+        async function finishAIGuide() {
+            const btn = document.getElementById('end-guide-btn'); btn.innerText = "✨ 正在凝结卡片..."; btn.style.pointerEvents = "none";
+            chatHistory.push({ role: "user", content: "格式总结：\n关键词：[2-4字]\n颜色：[幽蓝/绛紫/深绿/赤金/灰白]\n梦境重述：[50字]\n深层解析：[100字]" });
+            const finalResult = await callDeepSeek(chatHistory);
+            let keyword = "碎片"; let summary = "记忆模糊了"; let analysis = "解析失败"; let colorStr = "200, 200, 200";
+            try {
+                keyword = finalResult.match(/关键词：(.*?)\n/)?.[1] || "碎片";
+                const aiColor = finalResult.match(/颜色：(.*?)\n/)?.[1] || "";
+                if(aiColor.includes('蓝')) colorStr = "80, 200, 255"; else if(aiColor.includes('紫')) colorStr = "200, 100, 255"; else if(aiColor.includes('绿')) colorStr = "0, 255, 150"; else if(aiColor.includes('金')) colorStr = "255, 180, 50";
+                summary = finalResult.match(/梦境重述：(.*?)\n/)?.[1] || finalResult.substring(0, 50);
+                analysis = finalResult.match(/深层解析：([\s\S]*)/)?.[1] || "生成失败";
+            } catch(e) {}
+            dreamsDatabase.push({ id: Date.now(), date: new Date().toISOString().split('T')[0].replace(/-/g,'.'), keyword: keyword, summary: summary, analysis: analysis, color: colorStr, size: 140 }); sync();
+            btn.innerText = "[ 结束追忆并凝结卡片 ]"; btn.style.pointerEvents = "auto"; switchView('view-library');
+        }
+
+        let sortMode = 'time'; let isEditMode = false;
+        function setSortMode(m) { sortMode = m; document.querySelectorAll('.top-btn').forEach(b => b.classList.remove('active')); document.getElementById('sort-'+m).classList.add('active'); renderLibrary(); }
+        function renderLibrary() { const g = document.getElementById('library-grid'); g.innerHTML = ""; let data = [...dreamsDatabase]; if(sortMode==='time') data.sort((a,b)=>b.id - a.id); else data.sort((a,b)=>a.color.localeCompare(b.color)); data.forEach((d) => { const b = document.createElement('div'); b.className = 'lib-bubble'; b.style.width = b.style.height = d.size + 'px'; b.style.background = `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.08), rgba(${d.color}, 0.2))`; b.style.boxShadow = `inset 0 0 15px rgba(${d.color}, 0.3)`; b.innerHTML = `<div class="b-date">${d.date}</div><div class="b-key">${d.keyword}</div>`; b.onclick = () => openCard(d); g.appendChild(b); }); }
+
+        function openCard(d) { window.currentDream = d; isEditMode = false; document.getElementById('archive-card-inner').classList.remove('flipped'); updateCardUI(); document.getElementById('archive-card-wrapper').classList.add('active'); document.getElementById('overlay').classList.add('active'); }
+        function updateCardUI() { const d = window.currentDream; document.getElementById('front-keyword').innerText = d.keyword; document.getElementById('front-meta').innerText = d.date; document.getElementById('front-text-display').innerText = d.summary; document.getElementById('front-text-edit').value = d.summary; document.getElementById('back-analysis').innerText = d.analysis; document.getElementById('front-text-display').style.display = 'block'; document.getElementById('front-text-edit').style.display = 'none'; document.getElementById('edit-btn').innerText = '修改'; document.getElementById('front-keyword').contentEditable = "false"; }
+
+        function toggleEditMode() {
+            isEditMode = !isEditMode;
+            const display = document.getElementById('front-text-display'); const edit = document.getElementById('front-text-edit');
+            const kw = document.getElementById('front-keyword'); const btn = document.getElementById('edit-btn');
+            if (isEditMode) { display.style.display = 'none'; edit.style.display = 'block'; kw.contentEditable = "true"; btn.innerText = '保存'; } 
+            else { window.currentDream.summary = edit.value; window.currentDream.keyword = kw.innerText; const idx = dreamsDatabase.findIndex(i => i.id === window.currentDream.id); if (idx !== -1) dreamsDatabase[idx] = window.currentDream; sync(); display.innerText = edit.value; display.style.display = 'block'; edit.style.display = 'none'; kw.contentEditable = "false"; btn.innerText = '修改'; renderLibrary(); }
+        }
+
+        async function reAnalyzeDream() { const btn = document.getElementById('re-analyze-trigger'); btn.innerText = "✦ 重新回响中..."; btn.style.pointerEvents = "none"; const newAnalysis = await callDeepSeek([{role: "system", content: "重新生成深度心理学解析。"}, {role: "user", content: window.currentDream.summary}]); window.currentDream.analysis = newAnalysis; const idx = dreamsDatabase.findIndex(i => i.id === window.currentDream.id); if (idx !== -1) dreamsDatabase[idx] = window.currentDream; sync(); document.getElementById('back-analysis').innerText = newAnalysis; btn.innerText = "[ 重新解析 ]"; btn.style.pointerEvents = "auto"; }
+        function toggleCardFlip() { if(isEditMode) return; document.getElementById('archive-card-inner').classList.toggle('flipped'); }
+        function hideArchive() { document.getElementById('archive-card-wrapper').classList.remove('active'); document.getElementById('overlay').classList.remove('active'); }
+        function deleteDream() { if(confirm("抹除记忆？")) { dreamsDatabase = dreamsDatabase.filter(d => d.id !== window.currentDream.id); sync(); hideArchive(); renderLibrary(); } }
+    </script>
+</body>
+</html>
