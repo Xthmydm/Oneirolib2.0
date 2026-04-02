@@ -45,9 +45,8 @@
         .manual-link:active { color: #fff; border-color: rgba(255,255,255,0.3); }
         .lib-link { position: absolute; bottom: 10%; font-size: 12px; letter-spacing: 2px; color: rgba(255,255,255,0.6); padding: 10px; cursor: pointer; }
 
-        /* ====== 🌟 修复版：深潜模式布局 ====== */
+        /* ====== 深潜模式布局 ====== */
         #view-ai-guide { justify-content: flex-start; padding-top: 0; }
-        /* 固定导航栏，防止重叠 */
         .ai-guide-navbar { width: 100%; padding: 6% 6% 3% 6%; background: linear-gradient(to bottom, rgba(5,10,16,0.9), transparent); backdrop-filter: blur(5px); z-index: 60; box-sizing: border-box; display: flex; align-items: center; }
         
         .chat-container { width: 90%; flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 20px 0 120px 0; -webkit-overflow-scrolling: touch; }
@@ -261,10 +260,18 @@
         async function saveManualDream() {
             const tx = document.getElementById('dream-text').value; if(!tx) return;
             const btn = document.getElementById('btn-save-manual'); btn.innerText = "✨ 生成中..."; btn.style.pointerEvents = "none";
-            const analysis = await callDeepSeek([{role: "system", content: "你是一位解梦师。生成100字内的诗意解析。"}, {role: "user", content: tx}]);
-            dreamsDatabase.push({ id: Date.now(), date: document.getElementById('dream-date').value.replace(/-/g,'.'), keyword: document.getElementById('dream-keyword').value || "片段", summary: tx, analysis: analysis, color: manualColor, size: document.getElementById('dream-intensity').value });
-            sync(); btn.innerText = "封存并分析"; btn.style.pointerEvents = "auto"; toggleManualInput(false); 
+            // 🌟 更新提示词：控制字数，严禁星号
+            const analysis = await callDeepSeek([{role: "system", content: "你是一位解梦师。请生成200字左右的诗意解析。注意：回复中绝对不能包含任何星号(*)。"}, {role: "user", content: tx}]);
+            
+            const newDream = { id: Date.now(), date: document.getElementById('dream-date').value.replace(/-/g,'.'), keyword: document.getElementById('dream-keyword').value || "片段", summary: tx, analysis: analysis, color: manualColor, size: document.getElementById('dream-intensity').value };
+            dreamsDatabase.push(newDream);
+            sync(); 
+            btn.innerText = "封存并分析"; btn.style.pointerEvents = "auto"; 
+            toggleManualInput(false); 
             document.getElementById('dream-text').value = ""; document.getElementById('dream-keyword').value = "";
+            
+            switchView('view-library');
+            setTimeout(() => openCard(newDream), 100);
         }
 
         let chatHistory = []; let aiRecognition = null; let isAiListening = false;
@@ -274,7 +281,7 @@
             if(!localStorage.getItem('Oneiro_API_Key')) { openSettings(); return; } 
             switchView('view-ai-guide'); 
             document.getElementById('chat-box').innerHTML = ""; 
-            chatHistory = [{ role: "system", content: "你是梦境引导师。不解梦、不比喻、不诠释。每次回复只提一个简短问题。当用户回复较长、提到关键事件（（如人名、带有转折义的词语、超乎常理的事件）或表达情绪、自我分析时，先简短共情一句，再提问。" }]; 
+            chatHistory = [{ role: "system", content: "你是梦境引导师。不解梦、不比喻、不诠释。每次回复只提一个简短问题。当用户回复较长、提到关键事件（如人名、带有转折义的词语、超乎常理的事件）或表达情绪、自我分析时，先简短共情一句，再提问。" }]; 
             const welcomeMsg = "昨晚，你潜入了一个怎样的梦里？"; 
             appendMsg('ai', welcomeMsg); 
             chatHistory.push({role: "assistant", content: welcomeMsg}); 
@@ -297,7 +304,8 @@
 
         async function finishAIGuide() {
             const btn = document.getElementById('end-guide-btn'); btn.innerText = "✨ 正在凝结卡片..."; btn.style.pointerEvents = "none";
-            chatHistory.push({ role: "user", content: "格式总结：\n关键词：[2-4字]\n颜色：[幽蓝/绛紫/深绿/赤金/灰白]\n梦境重述：[50字]\n深层解析：[100字]" });
+            // 🌟 更新提示词：控制字数，严禁星号
+            chatHistory.push({ role: "user", content: "格式总结：\n关键词：[2-4字]\n颜色：[幽蓝/绛紫/深绿/赤金/灰白]\n梦境重述：[50字]\n深层解析：[200字左右的深度解析。注意：全文绝对不能包含任何星号(*)]" });
             const finalResult = await callDeepSeek(chatHistory);
             let keyword = "碎片"; let summary = "记忆模糊了"; let analysis = "解析失败"; let colorStr = "200, 200, 200";
             try {
@@ -307,13 +315,42 @@
                 summary = finalResult.match(/梦境重述：(.*?)\n/)?.[1] || finalResult.substring(0, 50);
                 analysis = finalResult.match(/深层解析：([\s\S]*)/)?.[1] || "生成失败";
             } catch(e) {}
-            dreamsDatabase.push({ id: Date.now(), date: new Date().toISOString().split('T')[0].replace(/-/g,'.'), keyword: keyword, summary: summary, analysis: analysis, color: colorStr, size: 140 }); sync();
-            btn.innerText = "[ 结束追忆并凝结卡片 ]"; btn.style.pointerEvents = "auto"; switchView('view-library');
+            
+            const newDream = { id: Date.now(), date: new Date().toISOString().split('T')[0].replace(/-/g,'.'), keyword: keyword, summary: summary, analysis: analysis, color: colorStr, size: 140 };
+            dreamsDatabase.push(newDream);
+            sync();
+            btn.innerText = "[ 结束追忆并凝结卡片 ]"; btn.style.pointerEvents = "auto"; 
+            
+            switchView('view-library');
+            setTimeout(() => openCard(newDream), 100);
         }
 
         let sortMode = 'time'; let isEditMode = false;
         function setSortMode(m) { sortMode = m; document.querySelectorAll('.top-btn').forEach(b => b.classList.remove('active')); document.getElementById('sort-'+m).classList.add('active'); renderLibrary(); }
-        function renderLibrary() { const g = document.getElementById('library-grid'); g.innerHTML = ""; let data = [...dreamsDatabase]; if(sortMode==='time') data.sort((a,b)=>b.id - a.id); else data.sort((a,b)=>a.color.localeCompare(b.color)); data.forEach((d) => { const b = document.createElement('div'); b.className = 'lib-bubble'; b.style.width = b.style.height = d.size + 'px'; b.style.background = `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.08), rgba(${d.color}, 0.2))`; b.style.boxShadow = `inset 0 0 15px rgba(${d.color}, 0.3)`; b.innerHTML = `<div class="b-date">${d.date}</div><div class="b-key">${d.keyword}</div>`; b.onclick = () => openCard(d); g.appendChild(b); }); }
+        
+        function renderLibrary() { 
+            const g = document.getElementById('library-grid'); 
+            g.innerHTML = ""; 
+            let data = [...dreamsDatabase]; 
+            
+            if(sortMode === 'time') {
+                data.sort((a,b) => {
+                    if (a.date !== b.date) return b.date.localeCompare(a.date);
+                    return b.id - a.id;
+                });
+            } else {
+                data.sort((a,b) => a.color.localeCompare(b.color)); 
+            }
+            
+            data.forEach((d) => { 
+                const b = document.createElement('div'); b.className = 'lib-bubble'; b.style.width = b.style.height = d.size + 'px'; 
+                b.style.background = `radial-gradient(circle at 30% 30%, rgba(255,255,255,0.08), rgba(${d.color}, 0.2))`; 
+                b.style.boxShadow = `inset 0 0 15px rgba(${d.color}, 0.3)`; 
+                b.innerHTML = `<div class="b-date">${d.date}</div><div class="b-key">${d.keyword}</div>`; 
+                b.onclick = () => openCard(d); 
+                g.appendChild(b); 
+            }); 
+        }
 
         function openCard(d) { window.currentDream = d; isEditMode = false; document.getElementById('archive-card-inner').classList.remove('flipped'); updateCardUI(); document.getElementById('archive-card-wrapper').classList.add('active'); document.getElementById('overlay').classList.add('active'); }
         function updateCardUI() { const d = window.currentDream; document.getElementById('front-keyword').innerText = d.keyword; document.getElementById('front-meta').innerText = d.date; document.getElementById('front-text-display').innerText = d.summary; document.getElementById('front-text-edit').value = d.summary; document.getElementById('back-analysis').innerText = d.analysis; document.getElementById('front-text-display').style.display = 'block'; document.getElementById('front-text-edit').style.display = 'none'; document.getElementById('edit-btn').innerText = '修改'; document.getElementById('front-keyword').contentEditable = "false"; }
@@ -326,7 +363,17 @@
             else { window.currentDream.summary = edit.value; window.currentDream.keyword = kw.innerText; const idx = dreamsDatabase.findIndex(i => i.id === window.currentDream.id); if (idx !== -1) dreamsDatabase[idx] = window.currentDream; sync(); display.innerText = edit.value; display.style.display = 'block'; edit.style.display = 'none'; kw.contentEditable = "false"; btn.innerText = '修改'; renderLibrary(); }
         }
 
-        async function reAnalyzeDream() { const btn = document.getElementById('re-analyze-trigger'); btn.innerText = "✦ 重新回响中..."; btn.style.pointerEvents = "none"; const newAnalysis = await callDeepSeek([{role: "system", content: "重新生成100字左右深度心理学解析。"}, {role: "user", content: window.currentDream.summary}]); window.currentDream.analysis = newAnalysis; const idx = dreamsDatabase.findIndex(i => i.id === window.currentDream.id); if (idx !== -1) dreamsDatabase[idx] = window.currentDream; sync(); document.getElementById('back-analysis').innerText = newAnalysis; btn.innerText = "[ 重新解析 ]"; btn.style.pointerEvents = "auto"; }
+        async function reAnalyzeDream() { 
+            const btn = document.getElementById('re-analyze-trigger'); btn.innerText = "✦ 重新回响中..."; btn.style.pointerEvents = "none"; 
+            // 🌟 更新提示词：控制字数，严禁星号
+            const newAnalysis = await callDeepSeek([{role: "system", content: "请重新生成200字左右的深度心理学解析。注意：回复中绝对不能包含任何星号(*)。"}, {role: "user", content: window.currentDream.summary}]); 
+            window.currentDream.analysis = newAnalysis; 
+            const idx = dreamsDatabase.findIndex(i => i.id === window.currentDream.id); 
+            if (idx !== -1) dreamsDatabase[idx] = window.currentDream; 
+            sync(); 
+            document.getElementById('back-analysis').innerText = newAnalysis; 
+            btn.innerText = "[ 重新解析 ]"; btn.style.pointerEvents = "auto"; 
+        }
         function toggleCardFlip() { if(isEditMode) return; document.getElementById('archive-card-inner').classList.toggle('flipped'); }
         function hideArchive() { document.getElementById('archive-card-wrapper').classList.remove('active'); document.getElementById('overlay').classList.remove('active'); }
         function deleteDream() { if(confirm("抹除记忆？")) { dreamsDatabase = dreamsDatabase.filter(d => d.id !== window.currentDream.id); sync(); hideArchive(); renderLibrary(); } }
