@@ -305,7 +305,7 @@
         async function finishAIGuide() {
             const btn = document.getElementById('end-guide-btn'); btn.innerText = "✨ 正在凝结卡片..."; btn.style.pointerEvents = "none";
             // 🌟 更新提示词：控制字数，严禁星号
-            chatHistory.push({ role: "user", content: "格式总结：\n关键词：[2-4字]\n颜色：[幽蓝/绛紫/深绿/赤金/灰白]\n梦境重述：[50字]\n深层解析：[200字左右的深度解析。注意：全文绝对不能包含任何星号(*)]" });
+            chatHistory.push({ role: "user", content: "格式总结：\n关键词：[2-5字]\n颜色：[幽蓝/绛紫/深绿/赤金/灰白]\n梦境重述：[150字]\n深层解析：[200字左右的深度解析。注意：全文绝对不能包含任何星号(*)]" });
             const finalResult = await callDeepSeek(chatHistory);
             let keyword = "碎片"; let summary = "记忆模糊了"; let analysis = "解析失败"; let colorStr = "200, 200, 200";
             try {
